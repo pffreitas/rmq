@@ -1,4 +1,4 @@
-module rmq
+module github.com/pffreitas/rmq
 
 go 1.13
 
