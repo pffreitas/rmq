@@ -199,7 +199,7 @@ func (connection *redisConnection) checkConnections() {
 				connection.closeConnection(connectionName)
 			}
 		}
-
+		time.Sleep(1 * time.Minute)
 	}
 }
 
