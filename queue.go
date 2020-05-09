@@ -217,7 +217,6 @@ func (queue *redisQueue) StartConsuming(prefetchLimit int, pollDuration time.Dur
 	queue.pollDuration = pollDuration
 	queue.deliveryChan = make(chan Delivery, prefetchLimit)
 	atomic.StoreInt32(&queue.consumingStopped, 0)
-	// log.Printf("rmq queue started consuming %s %d %s", queue, prefetchLimit, pollDuration)
 	go queue.consume()
 	return true
 }
@@ -229,12 +228,10 @@ func (queue *redisQueue) StopConsuming() <-chan struct{} {
 		return finishedChan
 	}
 
-	// log.Printf("rmq queue stopping %s", queue)
 	atomic.StoreInt32(&queue.consumingStopped, 1)
 	go func() {
 		queue.stopWg.Wait()
 		close(finishedChan)
-		// log.Printf("rmq queue stopped consuming %s", queue)
 	}()
 
 	return finishedChan
@@ -288,7 +285,6 @@ func (queue *redisQueue) addConsumer(tag string) string {
 		log.Panicf("rmq queue failed to add consumer %s %s", queue, tag)
 	}
 
-	// log.Printf("rmq queue added consumer %s %s", queue, name)
 	return name
 }
 
@@ -307,9 +303,7 @@ func (queue *redisQueue) consume() {
 		}
 
 		if atomic.LoadInt32(&queue.consumingStopped) == int32(1) {
-			// log.Printf("rmq queue stopped consuming %s", queue)
 			close(queue.deliveryChan)
-			// log.Printf("rmq queue stopped fetching %s", queue)
 			return
 		}
 	}
@@ -334,21 +328,17 @@ func (queue *redisQueue) consumeBatch(batchSize int) bool {
 	for i := 0; i < batchSize; i++ {
 		value, ok := queue.redisClient.RPopLPush(queue.readyKey, queue.unackedKey)
 		if !ok {
-			// debug(fmt.Sprintf("rmq queue consumed last batch %s %d", queue, i)) // COMMENTOUT
 			return false
 		}
 
-		// debug(fmt.Sprintf("consume %d/%d %s %s", i, batchSize, value, queue)) // COMMENTOUT
 		queue.deliveryChan <- newDelivery(value, queue.unackedKey, queue.rejectedKey, queue.pushKey, queue.redisClient)
 	}
 
-	// debug(fmt.Sprintf("rmq queue consumed batch %s %d", queue, batchSize)) // COMMENTOUT
 	return true
 }
 
 func (queue *redisQueue) consumerConsume(consumer Consumer) {
 	for delivery := range queue.deliveryChan {
-		// debug(fmt.Sprintf("consumer consume %s %s", delivery, consumer)) // COMMENTOUT
 		consumer.Consume(delivery)
 	}
 	queue.stopWg.Done()
@@ -356,7 +346,8 @@ func (queue *redisQueue) consumerConsume(consumer Consumer) {
 
 func (queue *redisQueue) consumerBatchConsume(batchSize int, timeout time.Duration, consumer BatchConsumer) {
 	defer queue.stopWg.Done()
-	batch := []Delivery{}
+	var batch []Delivery
+
 	for {
 		// Wait for first delivery
 		delivery, ok := <-queue.deliveryChan
@@ -365,7 +356,6 @@ func (queue *redisQueue) consumerBatchConsume(batchSize int, timeout time.Durati
 			return
 		}
 		batch = append(batch, delivery)
-		// debug(fmt.Sprintf("batch consume added delivery %d", len(batch))) // COMMENTOUT
 		batch, ok = queue.batchTimeout(batchSize, batch, timeout)
 		consumer.Consume(batch)
 		if !ok {
@@ -382,8 +372,6 @@ func (queue *redisQueue) batchTimeout(batchSize int, batch []Delivery, timeout t
 	for {
 		select {
 		case <-timer.C:
-			// debug("batch timer fired") // COMMENTOUT
-			// debug(fmt.Sprintf("batch consume consume %d", len(batch))) // COMMENTOUT
 			return batch, true
 		case delivery, ok := <-queue.deliveryChan:
 			if !ok {
@@ -391,7 +379,6 @@ func (queue *redisQueue) batchTimeout(batchSize int, batch []Delivery, timeout t
 				return batch, false
 			}
 			batch = append(batch, delivery)
-			// debug(fmt.Sprintf("batch consume added delivery %d", len(batch))) // COMMENTOUT
 			if len(batch) >= batchSize {
 				// debug(fmt.Sprintf("batch consume wait %d < %d", len(batch), batchSize)) // COMMENTOUT
 				return batch, true
@@ -421,8 +408,4 @@ func (queue *redisQueue) deleteRedisList(key string) int {
 	}
 
 	return total
-}
-
-func debug(message string) {
-	// log.Printf("rmq debug: %s", message) // COMMENTOUT
 }

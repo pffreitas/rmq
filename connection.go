@@ -58,7 +58,9 @@ func openConnectionWithRedisClient(tag string, redisClient RedisClient) *redisCo
 	redisClient.SAdd(connectionsKey, name)
 
 	go connection.heartbeat()
-	// log.Printf("rmq connection connected to %s %s:%s %d", name, network, address, db)
+
+	go connection.checkConnections()
+
 	return connection
 }
 
@@ -92,9 +94,13 @@ func (connection *redisConnection) GetConnections() []string {
 	return connection.redisClient.SMembers(connectionsKey)
 }
 
-// Check retuns true if the connection is currently active in terms of heartbeat
+// Check returns true if the connection is currently active in terms of heartbeat
 func (connection *redisConnection) Check() bool {
-	heartbeatKey := strings.Replace(connectionHeartbeatTemplate, phConnection, connection.Name, 1)
+	return connection.check(strings.Replace(connectionHeartbeatTemplate, phConnection, connection.Name, 1))
+}
+
+func (connection *redisConnection) check(connectionName string) bool {
+	heartbeatKey := strings.Replace(connectionHeartbeatTemplate, phConnection, connectionName, 1)
 	ttl, _ := connection.redisClient.TTL(heartbeatKey)
 	return ttl > 0
 }
@@ -126,7 +132,6 @@ func (connection *redisConnection) CloseAllQueues() int {
 // CloseAllQueuesInConnection closes all queues in the associated connection by removing all related keys
 func (connection *redisConnection) CloseAllQueuesInConnection() error {
 	connection.redisClient.Del(connection.queuesKey)
-	// debug(fmt.Sprintf("connection closed all queues %s %d", connection, connection.queuesKey)) // COMMENTOUT
 	return nil
 }
 
@@ -135,25 +140,71 @@ func (connection *redisConnection) GetConsumingQueues() []string {
 	return connection.redisClient.SMembers(connection.queuesKey)
 }
 
+func (connection *redisConnection) closeConnection(connectionName string) bool {
+	connectionQueues := strings.Replace(connectionQueuesTemplate, phConnection, connectionName, 1)
+
+	for _, queueName := range connection.redisClient.SMembers(connectionQueues) {
+		unackedQueue := strings.Replace(connectionQueueUnackedTemplate, phConnection, connectionName, 1)
+		unackedQueue = strings.Replace(unackedQueue, phQueue, queueName, 1)
+		connection.redisClient.Del(unackedQueue)
+
+		consumersQueue := strings.Replace(connectionQueueConsumersTemplate, phConnection, connectionName, 1)
+		consumersQueue = strings.Replace(consumersQueue, phQueue, queueName, 1)
+		connection.redisClient.Del(consumersQueue)
+	}
+
+	connection.redisClient.Del(connectionQueues)
+	_, ok := connection.redisClient.SRem(connectionsKey, connectionName)
+
+	return ok
+}
+
 // heartbeat keeps the heartbeat key alive
 func (connection *redisConnection) heartbeat() {
 	for {
+		log.Println("update hb")
 		if !connection.updateHeartbeat() {
-			// log.Printf("rmq connection failed to update heartbeat %s", connection)
+			log.Printf("rmq connection failed to update heartbeat %s", connection)
 		}
 
 		time.Sleep(time.Second)
 
 		if connection.heartbeatStopped {
-			// log.Printf("rmq connection stopped heartbeat %s", connection)
 			return
 		}
 	}
 }
 
+func (connection *redisConnection) checkConnections() {
+	for {
+		for _, connectionName := range connection.GetConnections() {
+			if !connection.check(connectionName) {
+				connectionQueues := connection.redisClient.SMembers(strings.Replace(connectionQueuesTemplate, phConnection, connectionName, 1))
+
+				for _, queueName := range connectionQueues {
+					unackedQueue := strings.Replace(connectionQueueUnackedTemplate, phConnection, connectionName, 1)
+					unackedQueue = strings.Replace(unackedQueue, phQueue, queueName, 1)
+
+					unackedLen, ok := connection.redisClient.LLen(unackedQueue)
+					if ok {
+						for i := 0; i < unackedLen; i++ {
+							_, ok := connection.redisClient.RPopLPush(unackedQueue, strings.Replace(queueReadyTemplate, phQueue, queueName, 1))
+							if !ok {
+								fmt.Print(">>>")
+							}
+						}
+					}
+				}
+
+				connection.closeConnection(connectionName)
+			}
+		}
+
+	}
+}
+
 func (connection *redisConnection) updateHeartbeat() bool {
-	ok := connection.redisClient.Set(connection.heartbeatKey, "1", heartbeatDuration)
-	return ok
+	return connection.redisClient.Set(connection.heartbeatKey, "1", heartbeatDuration)
 }
 
 // hijackConnection reopens an existing connection for inspection purposes without starting a heartbeat

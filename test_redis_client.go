@@ -374,6 +374,11 @@ func (client *TestRedisClient) FlushDb() {
 	client.ttl = *new(sync.Map)
 }
 
+// FlushDb delete all the keys of the currently selected DB. This command never fails.
+func (client *TestRedisClient) Keys(pattern string) ([]string, error) {
+	return []string{}, nil
+}
+
 //storeSet stores a set
 func (client *TestRedisClient) storeSet(key string, set map[string]struct{}) {
 	client.store.Store(key, set)

@@ -38,8 +38,6 @@ func (delivery *wrapDelivery) Payload() string {
 }
 
 func (delivery *wrapDelivery) Ack() bool {
-	// debug(fmt.Sprintf("delivery ack %s", delivery)) // COMMENTOUT
-
 	count, ok := delivery.redisClient.LRem(delivery.unackedKey, 1, delivery.payload)
 	return ok && count == 1
 }
@@ -65,6 +63,5 @@ func (delivery *wrapDelivery) move(key string) bool {
 		return false
 	}
 
-	// debug(fmt.Sprintf("delivery rejected %s", delivery)) // COMMENTOUT
 	return true
 }

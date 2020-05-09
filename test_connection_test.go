@@ -2,6 +2,7 @@ package rmq
 
 import (
 	"testing"
+	"time"
 
 	. "github.com/adjust/gocheck"
 )
@@ -39,4 +40,29 @@ func (suite *ConnectionSuite) TestConnection(c *C) {
 	c.Check(queue.Publish("blab"), Equals, true)
 	c.Check(connection.GetDelivery("things", 0), Equals, "blab")
 	c.Check(connection.GetDelivery("things", 1), Equals, "rmq.TestConnection: delivery not found: things[1]")
+}
+
+func TestConnectionDie(t *testing.T) {
+	conn := OpenConnection("test-conn-die-1", "tcp", "localhost:6379", 0)
+	q1 := conn.OpenQueue("q1")
+	q1.StartConsuming(20, time.Second)
+	q1.AddConsumerFunc("q1Consumer", func(delivery Delivery) {
+	})
+
+	q1.Publish("m1")
+	q1.Publish("m2")
+	q1.Publish("m3")
+
+	time.Sleep(5 * time.Second)
+	q1.StopConsuming()
+	conn.StopHeartbeat()
+
+	time.Sleep(1 * time.Minute)
+
+	q1 = conn.OpenQueue("q1")
+	q1.StartConsuming(20, time.Second)
+	q1.AddConsumerFunc("q1Consumer", func(delivery Delivery) {
+	})
+
+	time.Sleep(10 * time.Second)
 }

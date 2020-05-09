@@ -81,6 +81,10 @@ func (wrapper RedisWrapper) SRem(key, value string) (affected int, ok bool) {
 	return int(n), ok
 }
 
+func (wrapper RedisWrapper) Keys(pattern string) ([]string, error) {
+	return wrapper.rawClient.Keys(pattern).Result()
+}
+
 func (wrapper RedisWrapper) FlushDb() {
 	wrapper.rawClient.FlushDB()
 }

@@ -21,5 +21,6 @@ type RedisClient interface {
 	SRem(key, value string) (affected int, ok bool) // default affected: 0
 
 	// special
+	Keys(pattern string) ([]string, error)
 	FlushDb()
 }
