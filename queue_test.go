@@ -139,14 +139,14 @@ func (suite *QueueSuite) TestConsumer(c *C) {
 	c.Check(consumer.LastDelivery, IsNil)
 
 	c.Check(queue1.Publish("cons-d1"), Equals, true)
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(5 * time.Millisecond)
 	c.Assert(consumer.LastDelivery, NotNil)
 	c.Check(consumer.LastDelivery.Payload(), Equals, "cons-d1")
 	c.Check(queue1.ReadyCount(), Equals, 0)
 	c.Check(queue1.UnackedCount(), Equals, 1)
 
 	c.Check(queue1.Publish("cons-d2"), Equals, true)
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(5 * time.Millisecond)
 	c.Check(consumer.LastDelivery.Payload(), Equals, "cons-d2")
 	c.Check(queue1.ReadyCount(), Equals, 0)
 	c.Check(queue1.UnackedCount(), Equals, 2)
@@ -220,7 +220,7 @@ func (suite *QueueSuite) TestMulti(c *C) {
 	c.Check(queue.UnackedCount(), Equals, 0)
 
 	queue.StartConsuming(10, time.Millisecond)
-	time.Sleep(2 * time.Millisecond)
+	time.Sleep(5 * time.Millisecond)
 	c.Check(queue.ReadyCount(), Equals, 10)
 	c.Check(queue.UnackedCount(), Equals, 10)
 
